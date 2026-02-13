@@ -1,0 +1,260 @@
+import streamlit as st
+import json
+import httpx
+import pandas as pd
+from pathlib import Path
+
+BASE_URL = "http://127.0.0.1:8000"
+DATA_DIR = Path(__file__).parent / "data"
+
+ERA5_VARIABLES = [
+    'dewpoint_temperature_2m', 'temperature_2m', 'temperature_2m_min', 'temperature_2m_max',
+    'soil_temperature_level_1', 'soil_temperature_level_2', 'soil_temperature_level_3', 'soil_temperature_level_4',
+    'volumetric_soil_water_layer_1', 'volumetric_soil_water_layer_2', 'volumetric_soil_water_layer_3', 'volumetric_soil_water_layer_4',
+    'surface_net_solar_radiation_sum', 'surface_net_thermal_radiation_sum',
+    'surface_solar_radiation_downwards_sum', 'surface_thermal_radiation_downwards_sum',
+    'evaporation_from_bare_soil_sum', 'evaporation_from_the_top_of_canopy_sum',
+    'evaporation_from_vegetation_transpiration_sum', 'potential_evaporation_sum', 'total_evaporation_sum',
+    'runoff_sum', 'sub_surface_runoff_sum', 'surface_runoff_sum',
+    'u_component_of_wind_10m', 'v_component_of_wind_10m',
+    'total_precipitation_sum', 'leaf_area_index_high_vegetation', 'leaf_area_index_low_vegetation'
+]
+
+st.set_page_config(page_title="Geo Analysis Frontend", layout="wide")
+st.title("Geospatial Data Analysis — Frontend")
+
+st.sidebar.title("Controls")
+module = st.sidebar.selectbox("Module", ["Input", "Preprocessing", "ETL", "Analysis", "Report"]) 
+
+# Helper: load default files
+@st.cache_data
+def load_default_aoi():
+    path = DATA_DIR / "sample_aoi.geojson"
+    return json.loads(path.read_text())
+
+@st.cache_data
+def load_default_fire():
+    path = DATA_DIR / "sample_fire.csv"
+    return pd.read_csv(path)
+
+# Helper: call API with fallback
+def post_or_fallback(path, json_data=None, files=None):
+    url = BASE_URL + path
+    try:
+        with httpx.Client(timeout=30) as client:
+            if files:
+                resp = client.post(url, files=files)
+            else:
+                resp = client.post(url, json=json_data)
+            resp.raise_for_status()
+            return resp.json(), True
+    except Exception as e:
+        return {"error": str(e), "used_fallback": True}, False
+
+def get_or_fallback(path, params=None):
+    url = BASE_URL + path
+    try:
+        with httpx.Client(timeout=30) as client:
+            resp = client.get(url, params=params)
+            resp.raise_for_status()
+            return resp.json(), True
+    except Exception as e:
+        return {"error": str(e), "used_fallback": True}, False
+
+# UI for Input module
+if module == "Input":
+    st.header("Input — AOI / Authentication / Downloads")
+    st.subheader("AOI Upload")
+    uploaded = st.file_uploader("Upload AOI (GeoJSON / Shapefile zip)", type=["geojson", "zip"], key="aoi")
+    if uploaded is None:
+        st.info("No file uploaded — using default sample AOI")
+        aoi = load_default_aoi()
+        st.json(aoi)
+    else:
+        st.write("Uploaded file:", uploaded.name)
+        if uploaded.type == "application/json" or uploaded.name.endswith("geojson"):
+            aoi = json.load(uploaded)
+            st.json(aoi)
+        else:
+            st.write("File saved to /tmp for processing by API")
+
+    if st.button("Send AOI to API (POST /input/aoi/upload)"):
+        if uploaded:
+            files = {"file": (uploaded.name, uploaded.getvalue())}
+            result, ok = post_or_fallback(f"/input/aoi/upload", files=files)
+            st.json(result)
+        else:
+            # send default as file content
+            files = {"file": ("sample_aoi.geojson", json.dumps(load_default_aoi()))}
+            result, ok = post_or_fallback(f"/input/aoi/upload", files=files)
+            if not ok:
+                st.warning("API unreachable — simulated upload result shown")
+                st.write({"message": "AOI uploaded successfully (local simulation)", "file_path": str(DATA_DIR / "sample_aoi.geojson")})
+            else:
+                st.json(result)
+
+    st.markdown("---")
+    st.subheader("INPE fire download (simulate)")
+    fire_df = load_default_fire()
+    st.write("Sample fire points:")
+    st.dataframe(fire_df)
+    if st.button("Call /input/data/inpe/download"):
+        params = {"csv_path": "sample_fire.csv", "id_column": "id", "output_folder": "outputs"}
+        result, ok = post_or_fallback("/input/data/inpe/download", json_data=params)
+        if not ok:
+            st.warning("API unreachable — showing local sample data instead")
+            st.success("INPE fire data downloaded (local sample)")
+            st.dataframe(fire_df)
+        else:
+            st.json(result)
+
+# UI for Preprocessing
+if module == "Preprocessing":
+    st.header("Preprocessing — Grid / SICAR / Clip Raster")
+    st.subheader("Generate Grid")
+    resolution = st.number_input("Grid resolution (deg)", value=0.01)
+    st.write("Using sample AOI: ")
+    st.json(load_default_aoi())
+    if st.button("Call /geo/generate-grid"):
+        params = {"resolution_grid": resolution}
+        result, ok = post_or_fallback("/geo/generate-grid", json_data=params)
+        if not ok:
+            st.warning("API unreachable — showing simulated grid result")
+            st.json({"message": "Grid generated (simulated)", "cells": 100})
+        else:
+            st.json(result)
+
+    st.markdown("---")
+    st.subheader("Clip Raster")
+    raster_path = st.text_input("Raster path (or leave default)", value="/path/to/sample_raster.tif")
+    if st.button("Call /geo/clip-raster"):
+        params = {"raster_path": raster_path, "clipping_geometry": load_default_aoi()}
+        result, ok = post_or_fallback("/geo/clip-raster", json_data=params)
+        if not ok:
+            st.warning("API unreachable — simulated raster clipping completed")
+            st.success("Raster clipped locally (simulated)")
+        else:
+            st.json(result)
+
+# UI for ETL
+if module == "ETL":
+    st.header("ETL — Sentinel / LULC / IBGE PAM / Climate")
+    st.subheader("Process Sentinel ETL")
+    if st.button("Call /etl/sentinel/process"):
+        params = {"sentinel_files": [], "farm_grid_shapefile": "sample_grid.shp"}
+        result, ok = post_or_fallback("/etl/sentinel/process", json_data=params)
+        if not ok:
+            st.warning("API unreachable — simulated ETL result")
+            st.json({"message": "Sentinel data processed (simulated)"})
+        else:
+            st.json(result)
+
+    st.markdown("---")
+    st.subheader("Extract LULC percentage")
+    if st.button("Call /etl/lulc/extract-percentage"):
+        params = {"mapbiomas_raster": "mapbiomas.tif", "aoi_geometry": load_default_aoi()}
+        result, ok = post_or_fallback("/etl/lulc/extract-percentage", json_data=params)
+        if not ok:
+            st.warning("API unreachable — simulated LULC percentages")
+            st.json({"forest": 60.5, "agriculture": 30.0, "water": 9.5})
+        else:
+            st.json(result)
+
+    st.markdown("---")
+    st.subheader("Climate Data ETL")
+    st.write("ERA5 Extraction")
+    era5_start = st.date_input("Start Date", value=pd.to_datetime("2025-01-01"))
+    era5_end = st.date_input("End Date", value=pd.to_datetime("2025-06-30"))
+    if st.button("Extract ERA5 Data"):
+        params = {
+            "centroids_shapefile": str(DATA_DIR / "sample_centroids.csv"),  # Use CSV
+            "start_date": era5_start.strftime("%Y-%m-%d"),
+            "end_date": era5_end.strftime("%Y-%m-%d"),
+            "output_folder": str(DATA_DIR / "climate_output"),
+            "variables": ERA5_VARIABLES[:5]  # Subset for demo
+        }
+        result, ok = post_or_fallback("/etl/climate/era5/extract", json_data=params)
+        if not ok:
+            st.warning("API unreachable — simulated ERA5 extraction")
+            st.success("ERA5 data extracted (simulated)")
+        else:
+            st.json(result)
+
+    st.write("Open-Meteo Download")
+    if st.button("Download Open-Meteo Data"):
+        params = {
+            "centroids_shapefile": str(DATA_DIR / "sample_centroids.csv"),
+            "output_file": str(DATA_DIR / "openmeteo_data.parquet"),
+            "past_days": 5,
+            "forecast_days": 3
+        }
+        result, ok = post_or_fallback("/etl/climate/openmeteo/download", json_data=params)
+        if not ok:
+            st.warning("API unreachable — simulated Open-Meteo download")
+            st.success("Open-Meteo data downloaded (simulated)")
+        else:
+            st.json(result)
+
+    st.write("Process Climate Data")
+    if st.button("Process Climate Data"):
+        params = {
+            "era5_raw_files": [str(DATA_DIR / "climate_output" / "raw_era5_data_20250101_20250630.parquet")],
+            "openmeteo_file": str(DATA_DIR / "openmeteo_data.parquet"),
+            "output_folder": str(DATA_DIR / "processed_climate")
+        }
+        result, ok = post_or_fallback("/etl/climate/process", json_data=params)
+        if not ok:
+            st.warning("API unreachable — simulated climate processing")
+            st.success("Climate data processed (simulated)")
+        else:
+            st.json(result)
+
+# UI for Analysis
+if module == "Analysis":
+    st.header("Analysis — Crop Age / AGB / CAR status")
+    st.subheader("Breakeven calculation (example)")
+    fixed_cost = st.number_input("Fixed cost", value=10000.0)
+    herd_sizes = st.text_input("Herd sizes (comma)", value="10,20,30")
+    carbon_yield = st.number_input("Carbon yield", value=1.0)
+    if st.button("Call /analysis/breakeven-point"):
+        try:
+            herd_list = [int(x.strip()) for x in herd_sizes.split(",") if x.strip()]
+        except Exception:
+            herd_list = [10,20]
+        params = {"fixed_cost": fixed_cost, "herd_sizes": herd_list, "carbon_yield": carbon_yield, "verra_levy": 0.0, "product_cost_annual": 0.0}
+        result, ok = get_or_fallback("/analysis/breakeven-point", params=params)
+        if not ok:
+            st.warning("API unreachable — simulated breakeven")
+            st.json({"breakeven_per_herd": [1000,2000]})
+        else:
+            st.json(result)
+
+# UI for Report
+if module == "Report":
+    st.header("Report — Dashboard / PDF / Figures")
+    st.subheader("Dashboard PAM (sample)")
+    if st.button("Call /report/dashboard-pam"):
+        params = {"pam_geoparquet": "sample_pam.gpkg", "selected_culture": "soy", "selected_uf": "MG"}
+        result, ok = get_or_fallback("/report/dashboard-pam", params=params)
+        if not ok:
+            st.warning("API unreachable — showing simulated dashboard summary")
+            st.json({"message": "Dashboard generated (simulated)", "charts": 3})
+        else:
+            st.json(result)
+
+    st.markdown("---")
+    st.subheader("Generate monitoring report (PDF)")
+    if st.button("Call /report/generate-report"):
+        params = {"truecolor_images": [], "area_location_data": "sample_area"}
+        result, ok = post_or_fallback("/report/generate-report", json_data=params)
+        if not ok:
+            st.warning("API unreachable — simulated report generated")
+            st.success("Report generated locally: outputs/report_sample.pdf (simulated)")
+        else:
+            st.json(result)
+
+st.sidebar.markdown("---")
+st.sidebar.write("API base:", BASE_URL)
+st.sidebar.write("Data folder:", str(DATA_DIR))
+
+st.sidebar.info("If the FastAPI server is not running, the app will use local simulated results and sample data.")
