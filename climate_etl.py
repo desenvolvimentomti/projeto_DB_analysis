@@ -12,6 +12,11 @@ import requests
 from retry_requests import retry
 from tqdm import tqdm
 import numpy as np
+from dotenv import load_dotenv
+import json
+
+# Load environment variables from .env file
+load_dotenv()
 
 # ERA5 Variables
 ERA5_VARIABLES = [
@@ -26,6 +31,60 @@ ERA5_VARIABLES = [
     'u_component_of_wind_10m', 'v_component_of_wind_10m',
     'total_precipitation_sum', 'leaf_area_index_high_vegetation', 'leaf_area_index_low_vegetation'
 ]
+
+# ============================================================================
+# Earth Engine Authentication
+# ============================================================================
+
+def initialize_earth_engine():
+    """Initialize Earth Engine with service account credentials from .env"""
+    try:
+        # Check if already initialized
+        ee.data._credentials
+        print("Earth Engine already initialized")
+        return True
+    except:
+        pass
+    
+    # Try to initialize with service account from .env
+    service_account_path = os.getenv('GEE_SERVICE_ACCOUNT_JSON_PATH')
+    
+    if service_account_path and os.path.exists(service_account_path):
+        try:
+            credentials = ee.ServiceAccountCredentials.from_filename(service_account_path)
+            ee.Initialize(credentials)
+            print(f"✅ Earth Engine initialized with service account: {service_account_path}")
+            return True
+        except Exception as e:
+            print(f"❌ Failed to initialize with service account file: {e}")
+            return False
+    
+    # Try to initialize with JSON string from .env
+    service_account_json = os.getenv('GEE_SERVICE_ACCOUNT_JSON')
+    if service_account_json:
+        try:
+            service_account_info = json.loads(service_account_json)
+            credentials = ee.ServiceAccountCredentials.from_authorized_user_info(service_account_info)
+            ee.Initialize(credentials)
+            print("✅ Earth Engine initialized with service account JSON from .env")
+            return True
+        except Exception as e:
+            print(f"❌ Failed to initialize with JSON credentials: {e}")
+            return False
+    
+    # Last resort: try default credentials (won't work in production)
+    try:
+        ee.Initialize()
+        print("⚠️ Earth Engine initialized with default credentials (may not work in production)")
+        return True
+    except Exception as e:
+        print(f"❌ Earth Engine initialization failed: {e}")
+        print("\nTo fix this, you need to:")
+        print("1. Create a Google Cloud service account")
+        print("2. Download the JSON key file")
+        print("3. Set GEE_SERVICE_ACCOUNT_JSON_PATH in your .env file")
+        print("4. See .env.example for configuration template")
+        return False
 
 async def extract_era5_data(params):
     """Extract ERA5-Land data from Earth Engine"""
@@ -42,12 +101,9 @@ async def extract_era5_data(params):
 
     id_col = 'FID' if 'FID' in aoi_centroids_gdf.columns else 'grid_id'
 
-    # Initialize EE
-    try:
-        ee.Initialize()
-    except:
-        ee.Authenticate()
-        ee.Initialize()
+    # Initialize Earth Engine with service account
+    if not initialize_earth_engine():
+        raise RuntimeError("Failed to initialize Earth Engine. Check your .env configuration.")
 
     # Date range
     date_list = pd.date_range(start=params.start_date, end=params.end_date).strftime('%Y-%m-%d').tolist()

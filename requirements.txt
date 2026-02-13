@@ -22,3 +22,4 @@ retry-requests
 tqdm
 pytest
 pytest-asyncio
+python-dotenv

@@ -50,6 +50,20 @@ pytest -m asyncio
 pytest -m "not slow"
 ```
 
+### Run without Earth Engine API calls (mocked)
+```bash
+pytest -k "not era5"  # Skip ERA5 tests that call real API
+```
+
+## Note on Earth Engine Tests
+
+Tests that call Earth Engine API (like `test_process_climate_data`) will be skipped or mocked if:
+- `.env` file is not configured
+- `GEE_SERVICE_ACCOUNT_JSON_PATH` is not set
+- Earth Engine cannot be initialized
+
+See [Earth Engine Authentication Guide](../EARTH_ENGINE_AUTH.md) to enable full testing with real Earth Engine API.
+
 ## Test Categories
 
 ### 1. Model Validation Tests (`TestERA5ExtractParams`, `TestOpenMeteoDownloadParams`)

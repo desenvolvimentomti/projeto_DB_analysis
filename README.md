@@ -18,6 +18,11 @@ The API is divided into 5 main modules:
 2. Create a virtual environment: `python -m venv .venv`
 3. Activate the virtual environment: `.venv\Scripts\activate` (Windows)
 4. Install dependencies: `pip install -r requirements.txt`
+5. **Set up Earth Engine authentication** (required for climate ETL):
+   - Follow the [Earth Engine Authentication Guide](./EARTH_ENGINE_AUTH.md)
+   - Create a Google Cloud service account
+   - Save the JSON key
+   - Create `.env` file and add: `GEE_SERVICE_ACCOUNT_JSON_PATH=/path/to/key.json`
 
 Note: Geospatial libraries like GDAL may require additional system dependencies on Windows. Consider using conda for easier installation.
 

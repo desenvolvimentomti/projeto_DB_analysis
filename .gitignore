@@ -34,3 +34,6 @@ outputs/
 climate_output/
 processed_climate/
 .cache/
+.env.example
+
+.env
