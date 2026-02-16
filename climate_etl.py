@@ -48,10 +48,14 @@ def initialize_earth_engine():
     
     # Try to initialize with service account from .env
     service_account_path = os.getenv('GEE_SERVICE_ACCOUNT_JSON_PATH')
-    
-    if service_account_path and os.path.exists(service_account_path):
+    var = True
+    if service_account_path and var == True:
         try:
-            credentials = ee.ServiceAccountCredentials.from_filename(service_account_path)
+            #credentials = ee.ServiceAccountCredentials.from_filename(service_account_path)
+            credentials = ee.ServiceAccountCredentials(
+                "earth-engine-cli@climate-data-487619.iam.gserviceaccount.com", # Você encontra isso dentro do seu JSON
+                service_account_path
+            )
             ee.Initialize(credentials)
             print(f"✅ Earth Engine initialized with service account: {service_account_path}")
             return True
