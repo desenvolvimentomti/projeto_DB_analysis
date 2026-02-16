@@ -14,6 +14,8 @@ from tqdm import tqdm
 import numpy as np
 from dotenv import load_dotenv
 import json
+from google.cloud import storage
+from google.oauth2 import service_account
 
 # Load environment variables from .env file
 load_dotenv()
@@ -48,15 +50,15 @@ def initialize_earth_engine():
     
     # Try to initialize with service account from .env
     service_account_path = os.getenv('GEE_SERVICE_ACCOUNT_JSON_PATH')
-    var = True
-    if service_account_path and var == True:
+    #var = True
+    if service_account_path and os.path.exists(service_account_path): #var == True:
         try:
-            #credentials = ee.ServiceAccountCredentials.from_filename(service_account_path)
-            credentials = ee.ServiceAccountCredentials(
-                "earth-engine-cli@climate-data-487619.iam.gserviceaccount.com", # Você encontra isso dentro do seu JSON
-                service_account_path
-            )
-            ee.Initialize(credentials)
+
+            credentials = service_account.Credentials.from_service_account_file(service_account_path)
+            scoped_credentials = credentials.with_scopes(['https://www.googleapis.com/auth/earthengine', 'https://www.googleapis.com/auth/cloud-platform'])
+    
+            ee.Initialize(scoped_credentials)
+            
             print(f"✅ Earth Engine initialized with service account: {service_account_path}")
             return True
         except Exception as e:

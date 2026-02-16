@@ -36,7 +36,7 @@ processed_climate/
 .cache/
 .env.example
 .env
-manual_test*.py
+#manual_test*.py
 *.csv
 reference_material
 reference_material/
