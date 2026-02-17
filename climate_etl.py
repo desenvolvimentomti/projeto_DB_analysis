@@ -17,6 +17,12 @@ import json
 from google.cloud import storage
 from google.oauth2 import service_account
 
+
+# opção aoload_dotenv
+from app.config import settings # Usando sua nova classe Config
+
+
+
 # Load environment variables from .env file
 load_dotenv()
 
@@ -41,17 +47,24 @@ ERA5_VARIABLES = [
 def initialize_earth_engine():
     """Initialize Earth Engine with service account credentials from .env"""
     try:
+
+        if ee.data._get_state().initialized is True:
+            print("✅ Earth Engine já está inicializado.")
+            #print( ee.data.is_initialized)
+            #print(ee.data._get_state().initialized) 
+            return True
         # Check if already initialized
-        ee.data._credentials
-        print("Earth Engine already initialized")
-        return True
+        #ee.data._credentials
+        #print("Earth Engine already initialized")
+        #return True
     except:
         pass
     
     # Try to initialize with service account from .env
-    service_account_path = os.getenv('GEE_SERVICE_ACCOUNT_JSON_PATH')
-    #var = True
-    if service_account_path and os.path.exists(service_account_path): #var == True:
+    #service_account_path = os.getenv('GEE_SERVICE_ACCOUNT_JSON_PATH')
+    service_account_path = settings.gee_service_account_json_path
+    
+    if service_account_path and os.path.exists(service_account_path): 
         try:
 
             credentials = service_account.Credentials.from_service_account_file(service_account_path)
@@ -59,13 +72,13 @@ def initialize_earth_engine():
     
             ee.Initialize(scoped_credentials)
             
-            print(f"✅ Earth Engine initialized with service account: {service_account_path}")
+            print(f"✅ Earth Engine initialized with service account ") #{service_account_path}")
             return True
         except Exception as e:
             print(f"❌ Failed to initialize with service account file: {e}")
             return False
     
-    # Try to initialize with JSON string from .env
+    # Try to initialize with JSON string from .env  ## atualmente não funciona 
     service_account_json = os.getenv('GEE_SERVICE_ACCOUNT_JSON')
     if service_account_json:
         try:
@@ -91,6 +104,10 @@ def initialize_earth_engine():
         print("3. Set GEE_SERVICE_ACCOUNT_JSON_PATH in your .env file")
         print("4. See .env.example for configuration template")
         return False
+
+
+
+# extract em tese 
 
 async def extract_era5_data(params):
     """Extract ERA5-Land data from Earth Engine"""

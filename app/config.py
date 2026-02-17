@@ -13,7 +13,17 @@ class Settings(BaseSettings):
     debug_mode: bool = False
 
     # Configuração para carregar o arquivo .env
-    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
+    model_config = SettingsConfigDict(
+            env_file=".env", 
+            env_file_encoding="utf-8",
+            extra='ignore'  # <-- ISSO impede o erro se houver mais coisas no .env
+        )
+
+    # Variáveis que causaram o erro (agora declaradas)
+    #openmeteo_api_url: str = "https://api.open-meteo.com/v1/forecast"
+    #data_input_folder: str = "./data"
+    #data_output_folder: str = "./outputs"
+    #log_level: str = "INFO"
 
     def get_credentials_path(self):
         """Retorna o caminho absoluto do JSON de credenciais"""
