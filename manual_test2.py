@@ -4,6 +4,11 @@ from google.cloud import storage
 from google.oauth2 import service_account
 from dotenv import load_dotenv
 
+# Weather data imports
+import openmeteo_requests
+# GIS/Geospatial imports
+import geopandas as gpd
+
 load_dotenv()
 
 # CARREGANDO DADOS DE .ENV
@@ -52,4 +57,8 @@ def upload_to_bucket(blob_name, file_path, bucket):
 # Execução
 
 if __name__ == "__main__":
-    upload_to_bucket(destination_blob, local_file, bucket_name)
+    upload_to_bucket(destination_blob, local_file, bucket_name) #ja esta funcionando 
+
+    print("Teste concluído. Verifique os logs para detalhes.")
+
+    # now to use open-meteo . the weather Forecast API
